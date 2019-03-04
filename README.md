@@ -13,7 +13,9 @@ Thanks to @PneumaticDeath for help on the Bézier math, and @BillLange1968 for p
 
 Fun places to get/make SVGs:
 Mazes: http://www.mazegenerator.net
+
 Flowers: https://bleeptrack.itch.io/overflower
+
 Flags: https://github.com/lipis/flag-icon-css
 
 Bugs and things
@@ -34,7 +36,7 @@ feeding weirdness.)
 
 I did not support the SVG TEXT command while rendering to the plotter. It's probably easy to add but given the other plotter issues I thought it best to wait.
 
-The program really wants the file to end with </svg>, otherwise you'll get an EOF error.
+The program really wants the file to end with &lt;/svg&gt;, otherwise you'll get an EOF error.
 
 If any single command in the SVG file (e.g. very long PATH commands) exceeds the DIMensioned length of A$ (15000 characters) the program will crash.
 
