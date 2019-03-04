@@ -1,0 +1,621 @@
+'Renderific SVG parser 
+'ver 1.0
+'by @KevinSavetz
+'for Atari XL/XE computers running Turbo-BASIC XL
+
+DIM A$(15000),QR$(1),FILENAME$(20),SUBPATHX(150),SUBPATHY(150)
+XMAX=320:YMAX=192:'Resolution of this graphics mode
+
+GR.0:?"Renderific":?
+?"Enter filename to render"
+?"[Default: D1:IMAGE.SVG]"
+INPUT FILENAME$
+IF FILENAME$=""
+	FILENAME$="D1:IMAGE.SVG"
+ENDIF
+IF NOT INSTR(FILENAME$,":"):'change FOO.SVG to D:FOO.SVG
+	A$=FILENAME$
+	FILENAME$="D:"
+	FILENAME$(3)=A$
+ENDIF
+
+?:?"Enter scale factor"
+?"1 is ";XMAX;"x";YMAX;", 2 is ";XMAX*2;"x";YMAX*2;", etc."
+?"[Default: 1]"
+INPUT A$
+IF A$=""
+	SCALE=%1
+ELSE
+	SCALE=VAL(A$)
+ENDIF
+
+?:?"Output mode"
+?"1 is screen, 2 is plotter, 3 is both"
+?"[Default: 1]"
+INPUT A$
+IF A$=""
+	RENDER=%1
+ELSE
+	RENDER=VAL(A$)
+ENDIF
+
+?:?"Debug window?"
+?"0 is off, 1 is on"
+?"[Default: 0]"
+INPUT A$
+IF A$=""
+	DEBUG=%0
+ELSE
+	DEBUG=VAL(A$)
+ENDIF
+
+GR.24-16*DEBUG:'GRAPHICS 8, ADD TEXT WINDOW IF DEBUG MODE IS 1. 320X192
+COLOR %1
+
+IF (RENDER&2):'Set up Atari 1020 plotter
+	XMAX=480:YMAX=999
+	OPEN #%2,8,0,"P:"
+	?#%2;CHR$(27);CHR$(7)
+	?#%2;"C3"
+	?#%2;"L0"
+ENDIF
+
+IF DEBUG
+	T1=TIME:'count render time
+	?"Scale: ";SCALE
+	?"Resolution: ";XMAX*SCALE;"x";YMAX*SCALE
+ENDIF
+
+OPEN #%1,4,%0,FILENAME$
+
+DO
+	A$=""
+	REPEAT
+		GET#%1,A
+		IF ((A>=44 AND A<=90) OR (A>=97 AND A<=122) OR A=34 OR A=32)
+			'allow ,-./:;<=>?@" and space and A-Za-z
+			'https://www.atariarchives.org/mapping/appendix10.php
+			A$(LEN(A$)+%1)=CHR$(A)
+		ENDIF
+	UNTIL A=62:'> is end of line
+
+'======= /SVG =======
+	IF UINSTR(A$,"</svg"):'end of file
+		CLOSE #%1
+'		IF DEBUG:?"XHI=";XHI,"YHI=";YHI:ENDIF
+		IF (SCALE=%0)
+			X=TRUNC(XHI/XMAX)+%1
+			Y=TRUNC(YHI/YMAX)+%1
+			IF Y>X:X=Y:ENDIF:'MAX(X,Y)
+			SCALE=X:'Set scale
+			IF DEBUG
+				?"Setting scale to: ";SCALE
+				?"Resolution: ";XMAX*SCALE;"x";YMAX*SCALE
+			ENDIF
+			OPEN #%1,4,%0,FILENAME$:'back to top of file 
+			T1=TIME:'restart clock
+		ELSE
+			IF DEBUG
+				T1=(TIME-T1)/60
+				?"Render time: ";INT(T1*100)/100;" seconds";
+			ENDIF
+			FOR A=15 TO %0 STEP -%1:SOUND %0,50,10,A:NEXT A
+			CLOSE #%2
+'			POKE 764,255:WHILE PEEK(764)=255:WEND:POKE 764,255
+			WHILE %1:WEND:'pause forever
+		ENDIF
+	ENDIF:'</SVG
+
+'======= RECTANGLE =======
+	IF UINSTR(A$,"<rect")
+		XO=(UINSTR(A$," X="))+4
+		YO=(UINSTR(A$," Y="))+4
+		WO=(UINSTR(A$," WIDTH="))+8
+		HO=(UINSTR(A$," HEIGHT="))+9
+
+		QXO=(UINSTR(A$,CHR$(34),XO))-%1
+		QYO=(UINSTR(A$,CHR$(34),YO))-%1
+		QWO=(UINSTR(A$,CHR$(34),WO))-%1
+		QHO=(UINSTR(A$,CHR$(34),HO))-%1
+		
+		X1=VAL(A$(XO,QXO))
+		Y1=VAL(A$(YO,QYO))
+		W=VAL(A$(WO,QWO))
+		H=VAL(A$(HO,QHO))
+
+		EXEC DOT:'PLOT X1,Y1
+		X2=X1+W:Y2=Y1  :EXEC LINE
+		        Y2=Y1+H:EXEC LINE
+		X2=X1  :Y2=Y1+H:EXEC LINE
+		        Y2=Y1  :EXEC LINE
+	ENDIF:'<RECT
+
+'======= CIRCLE =======
+	IF UINSTR(A$,"<circle")
+		XO=(UINSTR(A$," CX="))+5:'get first character after CX="
+		YO=(UINSTR(A$," CY="))+5
+		RO=(UINSTR(A$," R="))+4
+
+		QXO=(UINSTR(A$,CHR$(34),XO))-%1:'find final character before closing "
+		QYO=(UINSTR(A$,CHR$(34),YO))-%1
+		RWO=(UINSTR(A$,CHR$(34),RO))-%1
+		
+		X=VAL(A$(XO,QXO)):'it's the number between ""
+		Y=VAL(A$(YO,QYO))
+		R=VAL(A$(RO,RWO))
+
+		IF (RENDER=1 AND SCALE):'if screen only use TBXL's circle command
+			CIRCLE X/scale,Y/scale,R/scale
+		ENDIF
+		
+		IF RENDER>1 AND SCALE:'if plotting, draw the circle instead
+		'http://www.hoist-point.com/applesoft_basic_tutorial.htm#drawing_circle_section
+			X1=X+R:Y1=Y
+			EXEC DOT:'INITIAL DRAWING POINT
+			FOR A = 0 TO 6.28318 STEP 2/R
+				X2=X+COS(A)*R
+				Y2=Y+SIN(A)*R
+				EXEC LINE
+			NEXT A
+		ENDIF
+	ENDIF:'<CIRCLE
+
+'======= TEXT =======
+	IF UINSTR(A$,"<text")
+		XO=(UINSTR(A$," X="))+4
+		YO=(UINSTR(A$," Y="))+4
+
+		QXO=(UINSTR(A$,CHR$(34),XO))-%1
+		QYO=(UINSTR(A$,CHR$(34),YO))-%1
+		
+		X=VAL(A$(XO,QXO))
+		Y=VAL(A$(YO,QYO))
+
+		'assume the next line, until <, is the text to show. This is not a good assumption
+		A$=""
+		REPEAT
+			GET#%1,A
+			IF ((A>=44 AND A<=90) OR (A>=97 AND A<=122) OR A=34 OR A=32)
+				'allow ,-./:;<=>?@" and space and A-Za-z
+				A$(LEN(A$)+%1)=CHR$(A)
+			ENDIF
+		UNTIL A=60:'< is end of text
+		IF SCALE AND RENDER&1
+			TEXT X/scale,Y/scale,A$(1,LEN(A$)-1)
+		ENDIF
+	ENDIF:'<text
+
+'======= ELLIPSE =======
+	IF UINSTR(A$,"<ELLIPSE")
+		XO=(UINSTR(A$," CX="))+5
+		YO=(UINSTR(A$," CY="))+5
+		WO=(UINSTR(A$," rx="))+5
+		HO=(UINSTR(A$," ry="))+5
+
+		QXO=(UINSTR(A$,CHR$(34),XO))-%1
+		QYO=(UINSTR(A$,CHR$(34),YO))-%1
+		QWO=(UINSTR(A$,CHR$(34),WO))-%1
+		QHO=(UINSTR(A$,CHR$(34),HO))-%1
+		
+		X=VAL(A$(XO,QXO))
+		Y=VAL(A$(YO,QYO))
+		W=VAL(A$(WO,QWO))
+		H=VAL(A$(HO,QHO))
+
+		IF (RENDER=1 AND SCALE):'if screen only use TBXL's circle command
+			CIRCLE X/scale,Y/scale,W/scale,H/scale
+		ENDIF
+
+		IF RENDER>1 AND SCALE:'if plotting, draw ellipse by hand
+			X1=X+W:Y1=Y
+			EXEC DOT:'INITIAL DRAWING POINT
+			FOR A = 0 TO 6.28318 STEP 2/W
+				X2=X+COS(A)*W
+				Y2=Y+SIN(A)*H
+				EXEC LINE
+			NEXT A
+		ENDIF
+	ENDIF:'</ELLIPSE
+
+'======= LINE =======
+	IF UINSTR(A$,"<LINE")
+		X1=(UINSTR(A$," X1="))+5
+		Y1=(UINSTR(A$," Y1="))+5
+		X2=(UINSTR(A$," X2="))+5
+		Y2=(UINSTR(A$," Y2="))+5
+
+		QX1=(UINSTR(A$,CHR$(34),X1))-%1
+		QY1=(UINSTR(A$,CHR$(34),Y1))-%1
+		QX2=(UINSTR(A$,CHR$(34),X2))-%1
+		QY2=(UINSTR(A$,CHR$(34),Y2))-%1
+		
+		X1=VAL(A$(X1,QX1))
+		Y1=VAL(A$(Y1,QY1))
+		X2=VAL(A$(X2,QX2))
+		Y2=VAL(A$(Y2,QY2))
+
+		EXEC DOT
+		EXEC LINE:'drawto x2,y2
+	ENDIF:'<LINE
+
+'======= POLYLINE/POLYGON =======
+	Z1=UINSTR(A$,"<POLYLINE")
+	Z2=UINSTR(A$,"<POLYGON")
+	IF Z1 OR Z2:'SEEMS LIKE YOU CAN'T HAVE TWO UINSTRS IN ONE IF STATEMENT
+		NOWLINETO=0
+		X1=(UINSTR(A$,"POINTS=")):'P OF POINTS
+		ND=X1
+			EXEC DIGIT
+			X1=ND		
+			QX1=(UINSTR(A$,",",X1))-%1:'LAST DIGIT OF X1
+			Y1=QX1+%2:'1ST DIGIT OF Y1, ASSUMES NO WHITESPACE AROUND COMMA
+			ND=Y1:EXEC NONDIGIT
+			QY1=ND-%1:'LAST DIGIT OF Y1
+			X1=VAL(A$(X1,QX1))
+			Y1=VAL(A$(Y1,QY1))
+			EXEC DOT
+			EXEC DIGIT
+			
+		WHILE ND
+			X2=ND:'1ST DIGIT OF X2
+			QX2=(UINSTR(A$,",",X2))-%1:'LAST DIGIT OF X2
+			Y2=QX2+%2:'1ST DIGIT OF Y2, ASSUMES NO WHITESPACE AROUND COMMA
+			ND=Y2:EXEC NONDIGIT
+			QY2=ND-%1:'LAST DIGIT OF Y2
+			X2=VAL(A$(X2,QX2))
+			Y2=VAL(A$(Y2,QY2))
+			EXEC LINE
+	
+			EXEC DIGIT:'SEARCH FOR ANOTHER
+		WEND
+		
+		IF Z2:'POLYGON
+			X2=X1:Y2=Y1
+			EXEC LINE
+		ENDIF
+	ENDIF:'<POLYLINE/POLYGON
+	
+'======= PATH =======
+	IF UINSTR(A$,"<PATH")
+		ND=(UINSTR(A$," d="))+4
+		SUBPATHINDEX=0
+		
+		WHILE ND:'iterate thru path commands
+			EXEC NONDIGIT:'find command
+
+'======= MOVETO =======
+			IF (A$(ND,ND)="M"or A$(ND,ND)="m"):'Moveto absolute or relative
+				RELATIVE=(A$(ND,ND)="m"):'Set relative mode 0 or 1	
+				ND=ND+1
+
+				EXEC NUMPARSE
+				X1=X2:Y1=Y2:'Because numparse's results are in x2,y2
+				
+				'save initial point for closepath
+				SUBPATHINDEX=SUBPATHINDEX+1
+				SUBPATHX(SUBPATHINDEX)=X1
+				SUBPATHY(SUBPATHINDEX)=Y1
+					
+				EXEC DOT
+				PATHX=X1:PATHY=Y1:'current point
+				
+				'done with that but, if more coords - subsequent are impicit lineto
+				EXEC QUERY
+				WHILE (QR$=" " OR QR$="-")
+					ND=ND+1
+					EXEC QUERY
+				WEND
+				IF (QR$="1"):'found another coordinate
+					ND=ND-1
+					NOWLINETO=1
+				ENDIF
+			ENDIF
+
+'======= CLOSEPATH =======
+			IF (A$(ND,ND)="Z" OR A$(ND,ND)="z"):'closepath Z or z
+				ND=ND+1
+				X2=SUBPATHX(SUBPATHINDEX):Y2=SUBPATHY(SUBPATHINDEX):'draw line to start of subpath
+				SUBPATHINDEX=SUBPATHINDEX-1
+				EXEC LINE
+				PATHX=X2:PATHY=Y2:'current point
+			ENDIF
+
+			IF NOWLINETO OR UINSTR("LHVCQTS",A$(ND,ND))
+
+'======= HORIZONTAL LINE =======
+				IF (A$(ND,ND)="H" OR A$(ND,ND)="h" )
+					IF (A$(ND,ND)="h")
+						RELATIVE=%1
+					ELSE
+						RELATIVE=%0
+					ENDIF
+					ND=ND+%1
+					EXEC DIGIT:X=ND
+					XNEG=(A$(ND-%1,ND-%1)="-")
+					EXEC NONDIGIT:QX=ND-%1
+					X2=VAL(A$(X,QX)):Y2=PATHY
+					YNEG=%0
+
+					'if its 0 mult by 1
+					'if its 1 mult by -1
+					XNEG=%1-(%2*(XNEG=%1))
+					YNEG=%1-(%2*(YNEG=%1))
+
+					IF RELATIVE OR XNEG=-1 OR YNEG=-1:'xneg or yneg imply relative. Grrr.
+						X2=PATHX+(X2*XNEG)
+						RELATIVE=%1
+					ENDIF
+
+					EXEC LINE
+					PATHX=X2:PATHY=Y2:'current point
+				ENDIF
+
+'======= VERTICAL LINE =======
+				IF (A$(ND,ND)="V" OR A$(ND,ND)="v" )
+					IF (A$(ND,ND)="v")
+						RELATIVE=%1
+					ELSE
+						RELATIVE=%0
+					ENDIF
+					ND=ND+%1
+					EXEC DIGIT:Y=ND
+					YNEG=(A$(ND-1,ND-1)="-")
+					EXEC NONDIGIT:QY=ND-1
+					Y2=VAL(A$(Y,QY)):X2=PATHX
+					XNEG=%0
+
+					'if its 0 mult by 1
+					'if its 1 mult by -1
+					XNEG=%1-(%2*(XNEG=%1))
+					YNEG=%1-(%2*(YNEG=%1))
+					
+					IF RELATIVE OR XNEG=-1 OR YNEG=-1:'xneg or yneg imply relative. Grrr.
+						Y2=PATHY+(Y2*YNEG)
+						RELATIVE=%1
+					ENDIF
+
+					EXEC LINE
+					PATHX=X2:PATHY=Y2:'current point
+				ENDIF
+
+'======= BEZIER =======
+				WHILE NOWBEZIER OR UINSTR("CQTS",A$(ND,ND))
+
+					IF (NOWBEZIER=0):'if second time thru, use same setup
+						IF (INSTR("cqts",A$(ND,ND)))
+							RELATIVE=%1
+						ELSE
+							RELATIVE=%0
+						ENDIF
+
+						IF (INSTR("CcSs",A$(ND,ND)))
+							CUBIC=%1
+						ELSE
+							CUBIC=%0
+						ENDIF
+
+						IF (INSTR("SsTt",A$(ND,ND)))
+							SHORTHAND=%1
+						ELSE
+							SHORTHAND=%0
+						ENDIF
+					ENDIF
+					ND=ND+%1
+
+					P0X=PATHX:'current point
+					P0Y=PATHY
+
+					IF SHORTHAND
+'From https://www.w3.org/TR/SVGTiny12/paths.html#PathDataCubicBezierCommands :
+'Quadradic: The control point shall be the reflection of the control point on the previous command relative to the current point. (!!Not implemented: If there is no previous command or if the previous command was not a Q, q, T or t, the control point shall be current point.)
+'Cubic: The first control point shall be the reflection of the second control point on the previous command relative to the current point. (!!Not implemented: If there is no previous command or if the previous command was not an C, c, S or s, the first control point shall be coincident with the current point.)
+						P1X=PATHX+(PATHX-PREVCTRLX)
+						P1Y=PATHY+(PATHY-PREVCTRLY)
+
+						EXEC NUMPARSE:'control point 2 (cubic)/endpoint (quadradic)
+						P2X=x2
+						P2Y=y2
+
+						IF CUBIC
+							EXEC NUMPARSE:'endpoint (cubic)
+							P3X=x2
+							P3Y=y2
+						ENDIF
+					ELSE:'not shorthand
+						EXEC NUMPARSE:'control point 1
+						P1X=x2
+						P1Y=y2
+
+						EXEC NUMPARSE:'control point 2 (cubic)/endpoint (quadradic)
+						P2X=x2
+						P2Y=y2
+
+						IF CUBIC
+							EXEC NUMPARSE:'endpoint (cubic)
+							P3X=x2
+							P3Y=y2
+						ENDIF
+					ENDIF:'shorthand/standard
+
+					IF CUBIC				
+						FOR T = %0 to %1 STEP 0.05
+							X2=(%1-T)^%3*P0X+(%1-T)^%2*T*%3*P1X+(%1-T)*T^%2*%3*P2X+T^3*P3X
+							Y2=(%1-T)^%3*P0Y+(%1-T)^%2*T*%3*P1Y+(%1-T)*T^%2*%3*P2Y+T^3*P3Y
+							EXEC LINE
+						NEXT T
+						PREVCTRLX = P2X:'Save control point for future S/s
+						PREVCTRLY = P2Y
+					ELSE:'QUADRADIC					
+						FOR T = %0 to 1 STEP 0.05
+							X2=(%1-T)*(%1-T)*P0X+%2*(%1-T)*T*P1X+T*T*P2X
+							Y2=(%1-T)*(%1-T)*P0Y+%2*(%1-T)*T*P1Y+T*T*P2Y
+							EXEC LINE
+						NEXT T
+						PREVCTRLX = P1X:'Save control point for future T/t
+						PREVCTRLY = P1Y
+					ENDIF
+
+					PATHX=X2:PATHY=Y2:'current point
+
+					'SEE IF THERE'S ANOHTER BEZIER COORD
+					EXEC QUERY
+					WHILE (QR$=" " OR QR$="-")
+						ND=ND+%1
+						EXEC QUERY
+					WEND
+					IF (QR$<>"1")
+						NOWBEZIER=%0
+					ELSE
+						NOWBEZIER=%1
+						ND=ND-%1						
+					ENDIF
+				WEND:'Q/C/OR NOWBEZIER
+
+'======= LINE =======
+				WHILE (A$(ND,ND)="L" OR A$(ND,ND)="l" OR NOWLINETO)
+					IF (NOWLINETO=%0 AND A$(ND,ND)="L")
+						RELATIVE=%0
+					ENDIF
+					IF (A$(ND,ND)="l")
+						RELATIVE=%1
+					ENDIF
+					ND=ND+%1
+
+					EXEC NUMPARSE
+
+					EXEC LINE
+					PATHX=X2:PATHY=Y2:'current point
+
+					'SEE IF THERE'S ANOHTER LINETO COORD
+					EXEC QUERY
+					WHILE (QR$=" " OR QR$="-")
+						ND=ND+%1
+						EXEC QUERY
+					WEND
+					IF (QR$<>"1")
+						NOWLINETO=%0
+					ELSE
+						NOWLINETO=%1
+						ND=ND-%1						
+					ENDIF
+				WEND:'L OR NOWLINETO
+			ENDIF
+
+			EXEC QUERY
+			WHILE(QR$=" " OR QR$="?")
+				ND=ND+%1
+				EXEC QUERY
+			?"=";A$(ND,ND);:'something bad happened
+			WEND
+			IF (QR$=">"):ND=%0:ENDIF			
+		WEND		
+	ENDIF:'"<PATH"
+
+LOOP
+
+'======= PROCEDURES =======
+
+PROC NONDIGIT:'ADVANCES ND TO POSITION IN A$ OF NEXT NON-DIGIT (skipping over spaces).
+'ND=START SEARCH. IF ND IS ALREADY SET AT A NONDIGIT, RETURNS ND UNCHANGED
+	WHILE (ND AND ND<LEN(A$) AND (A$(ND,ND)="." OR (A$(ND,ND)>="0" AND A$(ND,ND)<="9")))
+		ND=ND+%1
+	WEND
+	IF ND>=LEN(A$):ND=%0:ENDIF
+ENDPROC
+
+PROC DIGIT:'ADVANCES ND TO POSITION IN A$ OF NEXT DIGIT. ND=START SEARCH
+'IF ND IS ALREADY SET AT A DIGIT, RETURNS ND UNCHANGED
+	WHILE (ND AND ND<LEN(A$) AND (A$(ND,ND)<>"." AND (A$(ND,ND)<"0" OR A$(ND,ND)>"9")))
+		ND=ND+%1
+	WEND
+	IF ND>=LEN(A$):ND=%0:ENDIF
+ENDPROC
+
+PROC QUERY:'REPORT ON THE *TYPE* OF CHARTER AT INDEX ND
+	IF (ND>=LEN(A$)):QR$=">":ELSE:'any EOL-type thing gets >
+	IF (A$(ND,ND)=">"):QR$=">":ELSE
+	IF (A$(ND,ND)=CHR$(34)):QR$=">":ELSE
+	IF (A$(ND,ND)=" "):QR$=" ":ELSE
+	IF (A$(ND,ND)="-"):QR$="-":ELSE
+	IF (A$(ND,ND)="."):QR$="1":ELSE:'any number or . gets 1
+	IF (A$(ND,ND)>="0" AND A$(ND,ND)<="9"):QR$="1":ELSE
+	IF (A$(ND,ND)>="A" AND A$(ND,ND)<="Z"):QR$="A":ELSE:'any letter gets "A"
+	IF (A$(ND,ND)>="a" AND A$(ND,ND)<="z"):QR$="A":ELSE
+	QR$="?":'otherwise gets a ?
+	ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:'put that on my gravestone
+ENDPROC
+
+PROC DOT:'PLOT X1,Y1
+	IF X1>XHI:XHI=X1:ENDIF
+	IF Y1>YHI:YHI=Y1:ENDIF
+	IF (RENDER&2 AND SCALE):'move pen to location (but don't draw, unlike screen)
+		?#%2;"M";int(X1/SCALE);",";500-int(Y1/SCALE)
+	ENDIF
+	IF (RENDER&1 AND SCALE)
+		IF X1/SCALE<XMAX-1 AND X1/SCALE>=%0 AND Y1/SCALE<YMAX-1 AND Y1/SCALE>=%0 
+			PLOT X1/SCALE,Y1/SCALE
+		ELSE
+			IF DEBUG:?"dot out of range ";x1,y1:ENDIF
+			SOUND %0,20,8,10:PAUSE %3:SOUND
+		ENDIF
+	ENDIF
+ENDPROC
+
+PROC LINE:'DRAWTO X2,Y2
+	IF X2>XHI:XHI=X2:ENDIF
+	IF Y2>YHI:YHI=Y2:ENDIF
+	IF (RENDER&2 AND SCALE)
+		?#%2;"D";int(X2/SCALE);",";500-int(Y2/SCALE)
+	ENDIF
+	IF (RENDER&1 AND SCALE)
+		IF X2/SCALE<XMAX-1 AND X2/SCALE>=%0 AND Y2/SCALE<YMAX-1 AND Y2/SCALE>=%0 
+			DRAWTO X2/SCALE,Y2/SCALE
+		ELSE
+			IF DEBUG:?"line out of range ";x2,y2:ENDIF
+			SOUND %0,50,8,10:PAUSE %3:SOUND
+		ENDIF
+	ENDIF
+ENDPROC
+
+PROC NUMPARSE:'Parse next 2 digits in A$ at index ND, stuff in X2/Y2.
+				'Used by path/move and path/line 
+	EXEC DIGIT:X=ND:'move index to first digit of number->X
+	XNEG=(A$(ND-1,ND-1)="-"):'look back a character to see if X is negative
+	EXEC NONDIGIT:QX=ND-1:'find next nondigit. char before that is final digit of X
+	X2=(VAL(A$(X,QX))):'that's X2. if there's two decimal points, VAL handles it
+	
+	'we need to see if there's 2 decimal points in A$(X,QX). If so, the next number
+	'is crammed into it. SVG syntax is stupid.
+	Q1=INSTR(A$(X,QX),"."):'Is there one period?
+	IF Q1
+		Q2=INSTR(A$(X,QX),".",Q1):'look for a second period starting at first
+		IF Q2:'yes there are two
+			ND=Q2+X:'Move the index back to that decimal point
+		ENDIF
+	ENDIF	
+				
+	EXEC DIGIT:Y=ND:'find next digit. that's the first char of Y
+	YNEG=(A$(ND-1,ND-1)="-"):'look back to see if Y is negative
+	EXEC NONDIGIT:QY=ND-1:'find next nondigit. char before that is final digit of Y
+
+	Y2=VAL(A$(Y,QY))
+
+	'do period search on Y2
+	Q1=INSTR(A$(Y,QY),"."):'Is there one period?
+	IF Q1
+		Q2=INSTR(A$(Y,QY),".",Q1):'look for a second period
+		IF Q2:'yes there are two
+			ND=Q2+X:'Move the index back to that decimal point
+		ENDIF
+	ENDIF	
+
+	'if XNEG/YNEG are 0, mult by 1. if it's 1, mult by -1
+	XNEG=1-(2*(XNEG=1))
+	YNEG=1-(2*(YNEG=1))
+
+	IF RELATIVE OR (XNEG=-1) OR (YNEG=-1):'xneg or yneg imply relative. Grrr.
+		X2=PATHX+(X2*XNEG)
+		Y2=PATHY+(Y2*YNEG)
+		RELATIVE=1
+	ENDIF
+ENDPROC

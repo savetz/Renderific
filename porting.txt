@@ -1,0 +1,25 @@
+Renderific - Porting Notes
+
+You're welcome to port this to other computers.
+
+I wrote this in Turbo-BASIC XL (TBXL) for the Atari 8-bit computers. TBXL is based on Atari BASIC. The manual for TBXL is here: https://atariwiki.org/wiki/attach/TURBO-BASIC%20XL/Expanded_TURBO-BASIC_XL_Documentation-Ron_Fetzer_2.pdf and the manual for Atari BASIC is here: https://archive.org/details/atari-basic-reference-manual/
+
+I edit the source code on my Mac and use TurboBasic XL Parser Tool (https://github.com/dmsc/tbxl-parser/) to turn the code into a tokenized TBXL program. So, the pretty version of the code doesn't have line numbers. (And no GOTOs!)
+
+In TBXL, procedures are basically named GOSUBs. PROC PROCNAME ... ENDPROC is called by EXEC PROCNAME. This could easily be replaced by 1000 REM PROCNAME ... RETURN, called by GOSUB 1000.
+
+A lot of the program deals with parsing SVG files. String manipulation isn't the Atari BASIC strongest suit.
+
+When A$="ABCDEFGH", A$(2,2) returns "B". So it's (startchar, endchar)
+If your BASIC used MID$, that's equivalent to MID$(A$,2,1)
+
+INSTR is case-sensitive string search. UINSTR is case-insensitive.
+Usage is INSTR(A$,"thing to search for"[,where to start search])
+INSTR("Renderific","i",3) will start searching at character 3 (n) and will return 7, indicating the first i. Counting always starts at the first character of the string, even when the search doesn't.
+
+In TBXL, you can abuse VAL() a bit, which I do. VAL("  123.45.67") and VAL("123.45foo") both return 123.45 which is the response that I need. If your BASIC behaves differently, have fun.
+(Fun fact: this abuse is also why the program won't compile to assembly language with the Turbo BASIC XL compiler.)
+
+%0, %1, %2, and %3 are simply equivalent to 0, 1, 2, and 3. The former style saves a few bytes in TBXL.
+
+Please let me know if you port this to other platforms. Twitter is my preferred contact method - @KevinSavetz — or you can email me at kevin at savetz.com
