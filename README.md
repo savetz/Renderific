@@ -5,7 +5,16 @@ Renderific 1.0 - Readme
 ===================
 Renderific is an SVG renderer for Atari 8-bit computers, written in Turbo-BASIC XL. It tries to parse SVG Tiny files and draw them on screen and/or on an Atari 1020 plotter.
 
+Sample output:
+
 ![Sample Image 1 - flower](https://github.com/savetz/Renderific/blob/master/sample_images/renderific1.png)
+![Sample Image 2 - curve](https://github.com/savetz/Renderific/blob/master/sample_images/renderific2.png)
+![Sample Image 3 - triangle maze](https://github.com/savetz/Renderific/blob/master/sample_images/renderific3.png)
+![Sample Image 4 - Atari 800 logo](https://github.com/savetz/Renderific/blob/master/sample_images/renderific4.png)
+![Sample Image 5 - woodsy scene from Transylvania game](https://github.com/savetz/Renderific/blob/master/sample_images/renderific5.png)
+![Sample Image 6 - ANTIC podcast logo](https://github.com/savetz/Renderific/blob/master/sample_images/renderific6.png)
+![Sample Image 7 - circuit diagram](https://github.com/savetz/Renderific/blob/master/sample_images/renderific7.png)
+![Sample Image 8 - twisted polygon](https://github.com/savetz/Renderific/blob/master/sample_images/renderific8.png)
 
 It is copyright 2019 by Kevin Savetz (@KevinSavetz) and released under the MIT license.
 
