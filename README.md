@@ -5,6 +5,8 @@ Renderific 1.0 - Readme
 ===================
 Renderific is an SVG renderer for Atari 8-bit computers, written in Turbo-BASIC XL. It tries to parse SVG Tiny files and draw them on screen and/or on an Atari 1020 plotter.
 
+![Sample Image 1 - flower](sample_images/renderific1)
+
 It is copyright 2019 by Kevin Savetz (@KevinSavetz) and released under the MIT license.
 
 The SVG Tiny spec is at https://www.w3.org/TR/SVGTiny12/ 
@@ -15,6 +17,8 @@ Fun places to get/make SVGs:
 Mazes: http://www.mazegenerator.net
 
 Flowers: https://bleeptrack.itch.io/overflower
+
+Twisted Polygon Generator: https://msurguy.github.io/polygon-tool/
 
 Flags: https://github.com/lipis/flag-icon-css
 
