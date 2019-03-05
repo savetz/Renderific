@@ -20,8 +20,7 @@ Flags: https://github.com/lipis/flag-icon-css
 
 Bugs and things
 ---------------
-Shorthand, cubic Bézier curves (the "s" command in paths) don't draw correctly. I haven't been able to figure it out. (See the Slovakia and Tokelau flags, among many others.) 
-This is probably the biggest issue with the program.
+Shorthand, relative, cubic Bézier curves (the "s" command in paths) don't draw correctly. I haven't been able to figure it out. (See the Slovakia and Tokelau flags, among many others.)  This is probably the biggest issue with the program.
 
 I've found some SVGs that seem to intentionally draw in negative regions. I'm not sure what their intention is - is the viewport moved to include part of the negative quadrants? Anyway, Renderific doesn't support that. Many of the SVG flags at https://github.com/lipis/flag-icon-css do this. (I'm looking at you, Djibouti and Bouvet Island.)
 
