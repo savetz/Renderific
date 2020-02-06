@@ -39,6 +39,18 @@ ELSE
 	RENDER=VAL(A$)
 ENDIF
 
+IF (RENDER&2):'If plotter is enabled, also ask for the color
+	?:?"Color"
+	?"0 = Black, 1 = Blue, 2 = Green, 3 = Red"
+	?"[Default: 3]"
+	INPUT A$
+	IF A$=""
+		COL=%3
+	ELSE
+		COL=VAL(A$)
+	ENDIF
+ENDIF
+
 ?:?"Debug window?"
 ?"0 is off, 1 is on"
 ?"[Default: 0]"
@@ -56,7 +68,7 @@ IF (RENDER&2):'Set up Atari 1020 plotter
 	XMAX=480:YMAX=999
 	OPEN #%2,8,0,"P:"
 	?#%2;CHR$(27);CHR$(7)
-	?#%2;"C3"
+	?#%2;"C";COL
 	?#%2;"L0"
 ENDIF
 
@@ -549,7 +561,7 @@ PROC DOT:'PLOT X1,Y1
 	IF X1>XHI:XHI=X1:ENDIF
 	IF Y1>YHI:YHI=Y1:ENDIF
 	IF (RENDER&2 AND SCALE):'move pen to location (but don't draw, unlike screen)
-		?#%2;"M";int(X1/SCALE);",";int(Y1/SCALE)
+		?#%2;"M";int(X1/SCALE);",";-int(Y1/SCALE)
 	ENDIF
 	IF (RENDER&1 AND SCALE)
 		IF X1/SCALE<XMAX-1 AND X1/SCALE>=%0 AND Y1/SCALE<YMAX-1 AND Y1/SCALE>=%0 
@@ -565,7 +577,7 @@ PROC LINE:'DRAWTO X2,Y2
 	IF X2>XHI:XHI=X2:ENDIF
 	IF Y2>YHI:YHI=Y2:ENDIF
 	IF (RENDER&2 AND SCALE)
-		?#%2;"D";int(X2/SCALE);",";int(Y2/SCALE)
+		?#%2;"D";int(X2/SCALE);",";-int(Y2/SCALE)
 	ENDIF
 	IF (RENDER&1 AND SCALE)
 		IF X2/SCALE<XMAX-1 AND X2/SCALE>=%0 AND Y2/SCALE<YMAX-1 AND Y2/SCALE>=%0 
