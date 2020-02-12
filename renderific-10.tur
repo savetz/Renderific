@@ -11,13 +11,15 @@ GR.0:?"Renderific":?
 ?"[Default: D1:IMAGE.SVG]"
 INPUT FILENAME$
 IF FILENAME$=""
-	FILENAME$="D1:IMAGE.SVG"
+	FILENAME$="D2:SK.SVG"
 ENDIF
 IF NOT INSTR(FILENAME$,":"):'change FOO.SVG to D:FOO.SVG
 	A$=FILENAME$
 	FILENAME$="D:"
 	FILENAME$(3)=A$
 ENDIF
+
+OPEN #7,4,0,"K:"
 
 ?:?"Enter scale factor"
 ?"1 is ";XMAX;"x";YMAX;", 2 is ";XMAX*2;"x";YMAX*2;", etc."
@@ -291,6 +293,7 @@ DO
 	IF UINSTR(A$,"<PATH")
 		ND=(UINSTR(A$," d="))+4
 		SUBPATHINDEX=0
+		LASTBEZIER=0:'Tracing whether a bezier path was interrupted by non-bezier path commands.
 		
 		WHILE ND:'iterate thru path commands
 			EXEC NONDIGIT:'find command
@@ -321,6 +324,7 @@ DO
 					ND=ND-1
 					NOWLINETO=1
 				ENDIF
+				LASTBEZIER=0
 			ENDIF
 
 '======= CLOSEPATH =======
@@ -330,9 +334,22 @@ DO
 				SUBPATHINDEX=SUBPATHINDEX-1
 				EXEC LINE
 				PATHX=X2:PATHY=Y2:'current point
+				LASTBEZIER=0
 			ENDIF
 
-			IF NOWLINETO OR UINSTR("LHVCQTS",A$(ND,ND))
+			IF NOWLINETO OR UINSTR("LHVCQTSA",A$(ND,ND))
+
+'======= ARC =======
+			IF (A$(ND,ND)="A" OR A$(ND,ND)="a")
+				EXEC DIGIT
+				EXEC NUMPARSE
+				EXEC NUMPARSE
+				EXEC NUMPARSE
+				EXEC NUMPARSE
+				EXEC NUMPARSE
+				EXEC NUMPARSE
+				EXEC NUMPARSE
+			ENDIF
 
 '======= HORIZONTAL LINE =======
 				IF (A$(ND,ND)="H" OR A$(ND,ND)="h" )
@@ -360,6 +377,7 @@ DO
 
 					EXEC LINE
 					PATHX=X2:PATHY=Y2:'current point
+					LASTBEZIER=0
 				ENDIF
 
 '======= VERTICAL LINE =======
@@ -388,6 +406,7 @@ DO
 
 					EXEC LINE
 					PATHX=X2:PATHY=Y2:'current point
+					LASTBEZIER=0
 				ENDIF
 
 '======= BEZIER =======
@@ -419,10 +438,15 @@ DO
 
 					IF SHORTHAND
 'From https://www.w3.org/TR/SVGTiny12/paths.html#PathDataCubicBezierCommands :
-'Quadradic: The control point shall be the reflection of the control point on the previous command relative to the current point. (!!Not implemented: If there is no previous command or if the previous command was not a Q, q, T or t, the control point shall be current point.)
-'Cubic: The first control point shall be the reflection of the second control point on the previous command relative to the current point. (!!Not implemented: If there is no previous command or if the previous command was not an C, c, S or s, the first control point shall be coincident with the current point.)
-						P1X=PATHX+(PATHX-PREVCTRLX)
-						P1Y=PATHY+(PATHY-PREVCTRLY)
+'Quadradic: The control point shall be the reflection of the control point on the previous command relative to the current point. If there is no previous command or if the previous command was not a Q, q, T or t, the control point shall be current point.
+'Cubic: The first control point shall be the reflection of the second control point on the previous command relative to the current point. If there is no previous command or if the previous command was not an C, c, S or s, the first control point shall be coincident with the current point.
+						IF LASTBEZIER=0
+							P1X=P0X
+							P1Y=P0Y
+						ELSE
+							P1X=2*PATHX-PREVCTRLX
+							P1Y=2*PATHY-PREVCTRLY
+						ENDIF
 
 						EXEC NUMPARSE:'control point 2 (cubic)/endpoint (quadradic)
 						P2X=x2
@@ -449,12 +473,18 @@ DO
 						ENDIF
 					ENDIF:'shorthand/standard
 
-					IF CUBIC				
-						FOR T = %0 to %1 STEP 0.05
+					IF CUBIC
+					'?"P0X=";P0X;",P0Y=";P0Y:GET#7,KEY
+					'?"P1X=";P1X;",P1Y=";P1Y:GET#7,KEY
+					'?"P2X=";P2X;",P2Y=";P2Y:GET#7,KEY
+					'?"P3X=";P3X;",P3Y=";P3Y:GET#7,KEY:?
+						FOR T = %0 to %1 STEP 0.5
+						?;".";
 							X2=(%1-T)^%3*P0X+(%1-T)^%2*T*%3*P1X+(%1-T)*T^%2*%3*P2X+T^3*P3X
 							Y2=(%1-T)^%3*P0Y+(%1-T)^%2*T*%3*P1Y+(%1-T)*T^%2*%3*P2Y+T^3*P3Y
 							EXEC LINE
 						NEXT T
+						?:'"DONE":GET#7,KEY
 						PREVCTRLX = P2X:'Save control point for future S/s
 						PREVCTRLY = P2Y
 					ELSE:'QUADRADIC					
@@ -481,6 +511,7 @@ DO
 						NOWBEZIER=%1
 						ND=ND-%1						
 					ENDIF
+					LASTBEZIER=1
 				WEND:'Q/C/OR NOWBEZIER
 
 '======= LINE =======
@@ -511,9 +542,11 @@ DO
 						ND=ND-%1						
 					ENDIF
 				WEND:'L OR NOWLINETO
+				LASTBEZIER=0
 			ENDIF
 
 			EXEC QUERY
+			?"QUERY ";QR$;" ND ";ND;" ";A$(ND,ND+10): GET#7,KEY
 			WHILE(QR$=" " OR QR$="?")
 				ND=ND+%1
 				EXEC QUERY
@@ -617,17 +650,19 @@ PROC NUMPARSE:'Parse next 2 digits in A$ at index ND, stuff in X2/Y2.
 	IF Q1
 		Q2=INSTR(A$(Y,QY),".",Q1):'look for a second period
 		IF Q2:'yes there are two
-			ND=Q2+X:'Move the index back to that decimal point
+			ND=Q2+Y:'Move the index back to that decimal point
 		ENDIF
 	ENDIF	
 
 	'if XNEG/YNEG are 0, mult by 1. if it's 1, mult by -1
 	XNEG=1-(2*(XNEG=1))
 	YNEG=1-(2*(YNEG=1))
+	X2=XNEG*X2
+	Y2=YNEG*Y2
 
-	IF RELATIVE OR (XNEG=-1) OR (YNEG=-1):'xneg or yneg imply relative. Grrr.
-		X2=PATHX+(X2*XNEG)
-		Y2=PATHY+(Y2*YNEG)
+	IF RELATIVE:' OR (XNEG=-1) OR (YNEG=-1):'xneg or yneg imply relative. Grrr.
+		X2=PATHX+X2
+		Y2=PATHY+Y2
 		RELATIVE=1
 	ENDIF
 ENDPROC
