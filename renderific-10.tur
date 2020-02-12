@@ -548,7 +548,7 @@ DO
 			WHILE(QR$=" " OR QR$="?")
 				ND=ND+%1
 				EXEC QUERY
-			?"=";A$(ND,ND);:'something bad happened
+			    ?"=";A$(ND,ND);:'something bad happened
 			WEND
 			IF (QR$=">"):ND=%0:ENDIF			
 		WEND		
@@ -577,6 +577,7 @@ ENDPROC
 PROC QUERY:'REPORT ON THE *TYPE* OF CHARTER AT INDEX ND
 	IF (ND>=LEN(A$)):QR$=">":ELSE:'any EOL-type thing gets >
 	IF (A$(ND,ND)=">"):QR$=">":ELSE
+	IF (A$(ND,ND+1)="/>"):QR$=">":ND=ND+%1:ELSE:'Sometimes the tag is ending with />
 	IF (A$(ND,ND)=CHR$(34)):QR$=">":ELSE
 	IF (A$(ND,ND)=" "):QR$=" ":ELSE
 	IF (A$(ND,ND)="-"):QR$="-":ELSE
@@ -585,7 +586,7 @@ PROC QUERY:'REPORT ON THE *TYPE* OF CHARTER AT INDEX ND
 	IF (A$(ND,ND)>="A" AND A$(ND,ND)<="Z"):QR$="A":ELSE:'any letter gets "A"
 	IF (A$(ND,ND)>="a" AND A$(ND,ND)<="z"):QR$="A":ELSE
 	QR$="?":'otherwise gets a ?
-	ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:'put that on my gravestone
+	ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:ENDIF:'put that on my gravestone
 ENDPROC
 
 PROC DOT:'PLOT X1,Y1
