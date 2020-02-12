@@ -19,8 +19,6 @@ IF NOT INSTR(FILENAME$,":"):'change FOO.SVG to D:FOO.SVG
 	FILENAME$(3)=A$
 ENDIF
 
-OPEN #7,4,0,"K:"
-
 ?:?"Enter scale factor"
 ?"1 is ";XMAX;"x";YMAX;", 2 is ";XMAX*2;"x";YMAX*2;", etc."
 ?"[Default: 1]"
@@ -355,7 +353,6 @@ DO
 				EXEC NUMPARSE
 				ENDX=X2
 				ENDY=Y2
-				?"ND=";ND;" A$=";A$(ND,ND+2):GET#7,KEY
 				PATHX=ENDX:PATHY=ENDY:'Current point
 			ENDIF
 
@@ -487,7 +484,6 @@ DO
 							Y2=(%1-T)^%3*P0Y+(%1-T)^%2*T*%3*P1Y+(%1-T)*T^%2*%3*P2Y+T^3*P3Y
 							EXEC LINE
 						NEXT T
-						?:'"DONE":GET#7,KEY
 						PREVCTRLX = P2X:'Save control point for future S/s
 						PREVCTRLY = P2Y
 					ELSE:'QUADRADIC					
