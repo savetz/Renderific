@@ -341,14 +341,22 @@ DO
 
 '======= ARC =======
 			IF (A$(ND,ND)="A" OR A$(ND,ND)="a")
-				EXEC DIGIT
+			    RELATIVE=(A$(ND,ND)="a"):'Set relative mode 0 or 1	
+				ND=ND+1
 				EXEC NUMPARSE
+				RX=X2
+				RY=Y2
+				EXEC PARSENUM
+				ROTX=NUMBER
+				EXEC PARSENUM
+				SHORT=NUMBER
+				EXEC PARSENUM
+				CLOCKWISE=NUMBER
 				EXEC NUMPARSE
-				EXEC NUMPARSE
-				EXEC NUMPARSE
-				EXEC NUMPARSE
-				EXEC NUMPARSE
-				EXEC NUMPARSE
+				ENDX=X2
+				ENDY=Y2
+				?"ND=";ND;" A$=";A$(ND,ND+2):GET#7,KEY
+				PATHX=ENDX:PATHY=ENDY:'Current point
 			ENDIF
 
 '======= HORIZONTAL LINE =======
@@ -474,12 +482,7 @@ DO
 					ENDIF:'shorthand/standard
 
 					IF CUBIC
-					'?"P0X=";P0X;",P0Y=";P0Y:GET#7,KEY
-					'?"P1X=";P1X;",P1Y=";P1Y:GET#7,KEY
-					'?"P2X=";P2X;",P2Y=";P2Y:GET#7,KEY
-					'?"P3X=";P3X;",P3Y=";P3Y:GET#7,KEY:?
-						FOR T = %0 to %1 STEP 0.5
-						?;".";
+						FOR T = %0 to %1 STEP 0.05
 							X2=(%1-T)^%3*P0X+(%1-T)^%2*T*%3*P1X+(%1-T)*T^%2*%3*P2X+T^3*P3X
 							Y2=(%1-T)^%3*P0Y+(%1-T)^%2*T*%3*P1Y+(%1-T)*T^%2*%3*P2Y+T^3*P3Y
 							EXEC LINE
@@ -546,7 +549,6 @@ DO
 			ENDIF
 
 			EXEC QUERY
-			?"QUERY ";QR$;" ND ";ND;" ";A$(ND,ND+10): GET#7,KEY
 			WHILE(QR$=" " OR QR$="?")
 				ND=ND+%1
 				EXEC QUERY
@@ -622,44 +624,34 @@ PROC LINE:'DRAWTO X2,Y2
 	ENDIF
 ENDPROC
 
-PROC NUMPARSE:'Parse next 2 digits in A$ at index ND, stuff in X2/Y2.
-				'Used by path/move and path/line 
-	EXEC DIGIT:X=ND:'move index to first digit of number->X
-	XNEG=(A$(ND-1,ND-1)="-"):'look back a character to see if X is negative
-	EXEC NONDIGIT:QX=ND-1:'find next nondigit. char before that is final digit of X
-	X2=(VAL(A$(X,QX))):'that's X2. if there's two decimal points, VAL handles it
-	
-	'we need to see if there's 2 decimal points in A$(X,QX). If so, the next number
+PROC PARSENUM:'Parse a number in A$ at index ND, stuff it in NUMBER.
+				'Used by NUMPARSE and Arc drawing code
+	EXEC DIGIT:INDEX=ND:'move index to first digit of number -> NUMBER
+	NEGATIVE=(A$(ND-1,ND-1)="-"):'look back a character to see if NUMBER is negative
+	EXEC NONDIGIT:QNUM=ND-1:'find next nondigit. char before that is final digit of X
+	NUMBER=(VAL(A$(INDEX,QNUM))):'that's NUMBER. if there's two decimal points, VAL handles it.
+
+	'we need see if there's 2 decimal points in A$(INDEX,QNUM). If so, the next number
 	'is crammed into it. SVG syntax is stupid.
-	Q1=INSTR(A$(X,QX),"."):'Is there one period?
+	Q1=INSTR(A$(INDEX,QNUM),"."):'Is there one period?
 	IF Q1
-		Q2=INSTR(A$(X,QX),".",Q1):'look for a second period starting at first
-		IF Q2:'yes there are two
-			ND=Q2+X:'Move the index back to that decimal point
+		Q2=INSTR(A$(INDEX,QNUM),".",Q1):'look for a second period starting at first
+		IF Q2: 'yes, there are two.
+			ND=Q2+INDEX:'Move the index back to that decimal point
 		ENDIF
-	ENDIF	
-				
-	EXEC DIGIT:Y=ND:'find next digit. that's the first char of Y
-	YNEG=(A$(ND-1,ND-1)="-"):'look back to see if Y is negative
-	EXEC NONDIGIT:QY=ND-1:'find next nondigit. char before that is final digit of Y
+	ENDIF
+	'if NEGATIVE is 0, mult by 1. if it's 1, mult by -1
+	NEGATIVE=1-(2*(NEGATIVE=1))
+	NUMBER=NEGATIVE*NUMBER
+ENDPROC
 
-	Y2=VAL(A$(Y,QY))
-
-	'do period search on Y2
-	Q1=INSTR(A$(Y,QY),"."):'Is there one period?
-	IF Q1
-		Q2=INSTR(A$(Y,QY),".",Q1):'look for a second period
-		IF Q2:'yes there are two
-			ND=Q2+Y:'Move the index back to that decimal point
-		ENDIF
-	ENDIF	
-
-	'if XNEG/YNEG are 0, mult by 1. if it's 1, mult by -1
-	XNEG=1-(2*(XNEG=1))
-	YNEG=1-(2*(YNEG=1))
-	X2=XNEG*X2
-	Y2=YNEG*Y2
-
+PROC NUMPARSE:'Parse next 2 numbers in A$ starting at index ND, stuffed in X2/Y2.
+				'Used by path/move and path/line 
+	EXEC PARSENUM
+	X2=NUMBER
+	EXEC PARSENUM
+	Y2=NUMBER
+	
 	IF RELATIVE:' OR (XNEG=-1) OR (YNEG=-1):'xneg or yneg imply relative. Grrr.
 		X2=PATHX+X2
 		Y2=PATHY+Y2
