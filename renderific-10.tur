@@ -3,8 +3,21 @@
 'by @KevinSavetz
 'for Atari XL/XE computers running Turbo-BASIC XL
 
-DIM A$(15000),QR$(1),FILENAME$(20),SUBPATHX(150),SUBPATHY(150)
-XMAX=320:YMAX=192:'Resolution of this graphics mode
+DIM A$(10000),QR$(1),FILENAME$(20),SUBPATHX(150),SUBPATHY(150)
+XMIN=0:YMIN=0:XMAX=320:YMAX=192:'Resolution of this graphics mode
+PXMIN=0:PYMIN=-999:PXMAX=480:PYMAX=999:'Resolution of the 1020
+
+DIM CLIPPARAM(9):'0-1:Coordinate 1; 2-3:Coordinate 2; 4-7:Viewbox; 8: Draw flag
+'Index constants
+$define CLIP_X1=0
+$define CLIP_Y1=1
+$define CLIP_X2=2
+$define CLIP_Y2=3
+$define CLIP_XMIN=4
+$define CLIP_YMIN=5
+$define CLIP_XMAX=6
+$define CLIP_YMAX=7
+$define CLIP_FLAG=8
 
 GR.0:?"Renderific":?
 ?"Enter filename to render"
@@ -68,8 +81,8 @@ IF (RENDER&2):'Set up Atari 1020 plotter
 	XMAX=480:YMAX=999
 	OPEN #%2,8,0,"P:"
 	?#%2;CHR$(27);CHR$(7)
-	?#%2;"C";COL
-	?#%2;"L0"
+	?#%2;"C";COL:'Set the plotter color
+	?#%2;"L0":'Draw solid line
 ENDIF
 
 IF DEBUG
@@ -79,6 +92,8 @@ IF DEBUG
 ENDIF
 
 OPEN #%1,4,%0,FILENAME$
+
+OPEN #7,4,0,"K:"
 
 DO
 	A$=""
@@ -130,16 +145,15 @@ DO
 		QWO=(UINSTR(A$,CHR$(34),WO))-%1
 		QHO=(UINSTR(A$,CHR$(34),HO))-%1
 		
-		X1=VAL(A$(XO,QXO))
-		Y1=VAL(A$(YO,QYO))
+		XR=VAL(A$(XO,QXO))
+		YR=VAL(A$(YO,QYO))
 		W=VAL(A$(WO,QWO))
 		H=VAL(A$(HO,QHO))
 
-		EXEC DOT:'PLOT X1,Y1
-		X2=X1+W:Y2=Y1  :EXEC LINE
-		        Y2=Y1+H:EXEC LINE
-		X2=X1  :Y2=Y1+H:EXEC LINE
-		        Y2=Y1  :EXEC LINE
+		EXEC LINE, XR, YR, XR+W, YR
+		EXEC LINE, XR+W, YR, XR+H, YR+h
+		EXEC LINE, XR+W, YR+H, XR, YR+H
+		EXEC LINE, XR, YR+H, XR, YR
 	ENDIF:'<RECT
 
 '======= CIRCLE =======
@@ -167,7 +181,8 @@ DO
 			FOR A = 0 TO 6.28318 STEP 2/R
 				X2=X+COS(A)*R
 				Y2=Y+SIN(A)*R
-				EXEC LINE
+				EXEC LINE, X1, Y1, X2, Y2
+				X1=X2:Y1=Y2
 			NEXT A
 		ENDIF
 	ENDIF:'<CIRCLE
@@ -220,11 +235,11 @@ DO
 
 		IF RENDER>1 AND SCALE:'if plotting, draw ellipse by hand
 			X1=X+W:Y1=Y
-			EXEC DOT:'INITIAL DRAWING POINT
 			FOR A = 0 TO 6.28318 STEP 2/W
 				X2=X+COS(A)*W
 				Y2=Y+SIN(A)*H
-				EXEC LINE
+				EXEC LINE, X1, Y1, X2, Y2
+				X1=X2: Y1=Y2
 			NEXT A
 		ENDIF
 	ENDIF:'</ELLIPSE
@@ -246,8 +261,7 @@ DO
 		X2=VAL(A$(X2,QX2))
 		Y2=VAL(A$(Y2,QY2))
 
-		EXEC DOT
-		EXEC LINE:'drawto x2,y2
+		EXEC LINE, X1, Y1, X2, Y2
 	ENDIF:'<LINE
 
 '======= POLYLINE/POLYGON =======
@@ -265,7 +279,6 @@ DO
 			QY1=ND-%1:'LAST DIGIT OF Y1
 			X1=VAL(A$(X1,QX1))
 			Y1=VAL(A$(Y1,QY1))
-			EXEC DOT
 			EXEC DIGIT
 			
 		WHILE ND
@@ -276,14 +289,15 @@ DO
 			QY2=ND-%1:'LAST DIGIT OF Y2
 			X2=VAL(A$(X2,QX2))
 			Y2=VAL(A$(Y2,QY2))
-			EXEC LINE
+			EXEC LINE, X1, Y1, X2, Y2
+			X1=X2:Y1=Y2
 	
 			EXEC DIGIT:'SEARCH FOR ANOTHER
 		WEND
 		
 		IF Z2:'POLYGON
-			X2=X1:Y2=Y1
-			EXEC LINE
+			'X2=X1:Y2=Y1
+			EXEC LINE, X1, Y1, X2, Y2
 		ENDIF
 	ENDIF:'<POLYLINE/POLYGON
 	
@@ -309,9 +323,8 @@ DO
 				SUBPATHX(SUBPATHINDEX)=X1
 				SUBPATHY(SUBPATHINDEX)=Y1
 					
-				EXEC DOT
+				'EXEC DOT
 				PATHX=X1:PATHY=Y1:'current point
-				
 				'done with that but, if more coords - subsequent are impicit lineto
 				EXEC QUERY
 				WHILE (QR$=" " OR QR$="-")
@@ -330,7 +343,7 @@ DO
 				ND=ND+1
 				X2=SUBPATHX(SUBPATHINDEX):Y2=SUBPATHY(SUBPATHINDEX):'draw line to start of subpath
 				SUBPATHINDEX=SUBPATHINDEX-1
-				EXEC LINE
+				EXEC LINE, PATHX, PATHY, X2, Y2
 				PATHX=X2:PATHY=Y2:'current point
 				LASTBEZIER=0
 			ENDIF
@@ -351,9 +364,9 @@ DO
 				EXEC PARSENUM
 				CLOCKWISE=NUMBER
 				EXEC NUMPARSE
-				ENDX=X2
-				ENDY=Y2
-				PATHX=ENDX:PATHY=ENDY:'Current point
+				XEND=X2
+				YEND=Y2
+				PATHX=XEND:PATHY=YEND:'Current point
 			ENDIF
 
 '======= HORIZONTAL LINE =======
@@ -380,7 +393,7 @@ DO
 						RELATIVE=%1
 					ENDIF
 
-					EXEC LINE
+					EXEC LINE, PATHX, PATHY, X2, Y2
 					PATHX=X2:PATHY=Y2:'current point
 					LASTBEZIER=0
 				ENDIF
@@ -409,7 +422,7 @@ DO
 						RELATIVE=%1
 					ENDIF
 
-					EXEC LINE
+					EXEC LINE, PATHX, PATHY, X2, Y2
 					PATHX=X2:PATHY=Y2:'current point
 					LASTBEZIER=0
 				ENDIF
@@ -482,7 +495,8 @@ DO
 						FOR T = %0 to %1 STEP 0.05
 							X2=(%1-T)^%3*P0X+(%1-T)^%2*T*%3*P1X+(%1-T)*T^%2*%3*P2X+T^3*P3X
 							Y2=(%1-T)^%3*P0Y+(%1-T)^%2*T*%3*P1Y+(%1-T)*T^%2*%3*P2Y+T^3*P3Y
-							EXEC LINE
+							EXEC LINE, PATHX, PATHY ,X2, Y2
+							PATHX=X2: PATHY=Y2
 						NEXT T
 						PREVCTRLX = P2X:'Save control point for future S/s
 						PREVCTRLY = P2Y
@@ -490,7 +504,8 @@ DO
 						FOR T = %0 to 1 STEP 0.05
 							X2=(%1-T)*(%1-T)*P0X+%2*(%1-T)*T*P1X+T*T*P2X
 							Y2=(%1-T)*(%1-T)*P0Y+%2*(%1-T)*T*P1Y+T*T*P2Y
-							EXEC LINE
+							EXEC LINE, PATHX, PATHY, X2, Y2
+							PATHX=X2: PATHY=Y2
 						NEXT T
 						PREVCTRLX = P1X:'Save control point for future T/t
 						PREVCTRLY = P1Y
@@ -525,7 +540,7 @@ DO
 
 					EXEC NUMPARSE
 
-					EXEC LINE
+					EXEC LINE, PATHX, PATHY, X2, Y2
 					PATHX=X2:PATHY=Y2:'current point
 
 					'SEE IF THERE'S ANOHTER LINETO COORD
@@ -596,27 +611,36 @@ PROC DOT:'PLOT X1,Y1
 		?#%2;"M";int(X1/SCALE);",";-int(Y1/SCALE)
 	ENDIF
 	IF (RENDER&1 AND SCALE)
-		IF X1/SCALE<XMAX-1 AND X1/SCALE>=%0 AND Y1/SCALE<YMAX-1 AND Y1/SCALE>=%0 
-			PLOT X1/SCALE,Y1/SCALE
-		ELSE
-			IF DEBUG:?"dot out of range ";x1,y1:ENDIF
-			SOUND %0,20,8,10:PAUSE %3:SOUND
-		ENDIF
+		'IF X1/SCALE<XMAX-1 AND X1/SCALE>=%0 AND Y1/SCALE<YMAX-1 AND Y1/SCALE>=%0 
+		'	PLOT X1/SCALE,Y1/SCALE
+		'ELSE
+		'	IF DEBUG:?"dot out of range ";x1,y1:ENDIF
+		'	SOUND %0,20,8,10:PAUSE %3:SOUND
+		'ENDIF
 	ENDIF
 ENDPROC
 
-PROC LINE:'DRAWTO X2,Y2
+PROC LINE, X1, Y1, X2, Y2
 	IF X2>XHI:XHI=X2:ENDIF
 	IF Y2>YHI:YHI=Y2:ENDIF
 	IF (RENDER&2 AND SCALE)
 		?#%2;"D";int(X2/SCALE);",";-int(Y2/SCALE)
 	ENDIF
 	IF (RENDER&1 AND SCALE)
-		IF X2/SCALE<XMAX-1 AND X2/SCALE>=%0 AND Y2/SCALE<YMAX-1 AND Y2/SCALE>=%0 
-			DRAWTO X2/SCALE,Y2/SCALE
-		ELSE
-			IF DEBUG:?"line out of range ";x2,y2:ENDIF
-			SOUND %0,50,8,10:PAUSE %3:SOUND
+	    CLIPPARAM(@CLIP_X1)=X1/SCALE:CLIPPARAM(@CLIP_Y1)=Y1/SCALE
+		CLIPPARAM(@CLIP_X2)=X2/SCALE:CLIPPARAM(@CLIP_Y2)=Y2/SCALE
+		CLIPPARAM(@CLIP_XMIN)=XMIN:CLIPPARAM(@CLIP_XMAX)=XMAX-1
+		CLIPPARAM(@CLIP_YMIN)=YMIN:CLIPPARAM(@CLIP_YMAX)=YMAX-1
+		EXEC CLIP
+		IF CLIPPARAM(@CLIP_FLAG) > 0
+			'IF DEBUG:?"PLOT ";CLIPPARAM(@CLIP_X1),CLIPPARAM(@CLIP_Y1);:ENDIF
+			'IF X2/SCALE<XMAX-1 AND X2/SCALE>=%0 AND Y2/SCALE<YMAX-1 AND Y2/SCALE>=%0 
+			PLOT CLIPPARAM(@CLIP_X1),CLIPPARAM(@CLIP_Y1)
+			'IF DEBUG:?" DRAWTO";CLIPPARAM(@CLIP_X2),CLIPPARAM(@CLIP_Y2):ENDIF
+			DRAWTO CLIPPARAM(@CLIP_X2),CLIPPARAM(@CLIP_Y2)
+		'ELSE
+			'IF DEBUG:?"line out of range ";CLIPPARAM(@CLIP_X1),CLIPPARAM(@CLIP_Y1);" ";CLIPPARAM(@CLIP_X2),CLIPPARAM(@CLIP_Y2):ENDIF
+		'	SOUND %0,50,8,10:PAUSE %3:SOUND
 		ENDIF
 	ENDIF
 ENDPROC
@@ -649,9 +673,140 @@ PROC NUMPARSE:'Parse next 2 numbers in A$ starting at index ND, stuffed in X2/Y2
 	EXEC PARSENUM
 	Y2=NUMBER
 	
-	IF RELATIVE:' OR (XNEG=-1) OR (YNEG=-1):'xneg or yneg imply relative. Grrr.
+	IF RELATIVE:'Relative coordinates, just add them to the last point
 		X2=PATHX+X2
 		Y2=PATHY+Y2
-		RELATIVE=1
 	ENDIF
+ENDPROC
+
+'=== Clip lines: According to Cohen-Sutherland. Parameters are set by CLIPPARAM ===
+'0-1: Coordinate of endpoint 1 (X1,Y1)
+'2-3: Coordinate of endpoint 2 (X2,Y2)
+'4-7: Viewbox (XMIN,YMIN,XMAX,YMAX)
+'8: = 0: Don't draw, = 1: Draw
+PROC CLIP 
+ $define CLIP_LEFT = 1 
+ $define CLIP_RIGHT = 2
+ $define CLIP_LOWER = 4
+ $define CLIP_UPPER = 8
+  K1=0:K2=0: 'Look in which of nine quadrants the endpoint lies
+  'Differences along the X resp. Y axis
+  DX=CLIPPARAM(@CLIP_X1)-CLIPPARAM(@CLIP_X2)
+  DY=CLIPPARAM(@CLIP_Y1)-CLIPPARAM(@CLIP_Y2)
+
+  'We set the bits according to the side of the view port, the points are lying in.
+  IF CLIPPARAM(@CLIP_Y1) < CLIPPARAM(@CLIP_YMIN)
+    K1=@CLIP_LOWER
+  ENDIF
+  IF CLIPPARAM(@CLIP_Y1) > CLIPPARAM(@CLIP_YMAX)
+	K1=@CLIP_UPPER
+  ENDIF
+  IF CLIPPARAM(@CLIP_X1) < CLIPPARAM(@CLIP_XMIN)
+    K1=K1!@CLIP_LEFT
+  ENDIF
+  IF CLIPPARAM(@CLIP_X1) > CLIPPARAM(@CLIP_XMAX)
+	K1=K1!@CLIP_RIGHT
+  ENDIF
+
+  IF CLIPPARAM(@CLIP_Y2) < CLIPPARAM(@CLIP_YMIN)
+    K2=@CLIP_LOWER
+  ENDIF
+  IF CLIPPARAM(@CLIP_Y2) > CLIPPARAM(@CLIP_YMAX)
+	K2=@CLIP_UPPER
+  ENDIF
+  IF CLIPPARAM(@CLIP_X2) < CLIPPARAM(@CLIP_YMIN)
+    K2=K1!@CLIP_LEFT
+  ENDIF
+  IF CLIPPARAM(@CLIP_X2) > CLIPPARAM(@CLIP_YMAX)
+	K2=K1!@CLIP_RIGHT
+  ENDIF
+
+  ' If a part of a point lies outside of the view box (i.e. it is clipped),
+  ' then some flag is set, i.e. Kx > 0
+
+  CLIPPARAM(@CLIP_FLAG)=1: 'Init Draw return value to 1 (i.e. true)
+  WHILE K1 > 0 OR K2 > 0
+	IF (K1 & K2) > 0: 'Both endpoints lie on the same side, nothing to be drawn
+	  CLIPPARAM(@CLIP_FLAG) = 0
+	  EXIT:'Nothing to draw, return.
+	ENDIF  
+
+	'We clip the first point
+	IF K1 > 0
+	  IF (K1 & @CLIP_LEFT) > 0: 'Left of view box
+		CLIPPARAM(@CLIP_Y1)=CLIPPARAM(@CLIP_Y1)+(CLIPPARAM(@CLIP_XMIN)-CLIPPARAM(@CLIP_X1))*DY/DX
+	    CLIPPARAM(@CLIP_X1)=CLIPPARAM(@CLIP_XMIN)
+	  ELSE
+	  	IF (K1 & @CLIP_RIGHT) > 0: 'Right of view box
+		  CLIPPARAM(@CLIP_Y1)=CLIPPARAM(@CLIP_Y1)+(CLIPPARAM(@CLIP_XMAX)-1-CLIPPARAM(@CLIP_X1))*DY/DX
+		  CLIPPARAM(@CLIP_X1)=CLIPPARAM(@CLIP_XMAX)-1
+		ENDIF
+	  ENDIF
+	  IF (K1 & @CLIP_LOWER) > 0: 'Under view box
+		CLIPPARAM(@CLIP_X1)=CLIPPARAM(@CLIP_X1)+(CLIPPARAM(@CLIP_YMIN)-CLIPPARAM(@CLIP_Y1))*DX/DY
+	    CLIPPARAM(@CLIP_Y1)=CLIPPARAM(@CLIP_YMIN)
+	  ELSE
+	  	IF (K1 & @CLIP_UPPER) > 0: 'Over view box
+		  CLIPPARAM(@CLIP_X1)=CLIPPARAM(@CLIP_X1)+(CLIPPARAM(@CLIP_YMAX)-1-CLIPPARAM(@CLIP_Y1))*DX/DY
+		  CLIPPARAM(@CLIP_Y1)=CLIPPARAM(@CLIP_YMAX)-1
+		ENDIF
+	  ENDIF
+	  K1 = 0
+	  'We recheck clipping.
+      IF CLIPPARAM(@CLIP_Y1) < CLIPPARAM(@CLIP_YMIN)
+        K1=@CLIP_LOWER
+      ENDIF
+  	  IF CLIPPARAM(@CLIP_Y1) > CLIPPARAM(@CLIP_YMAX)
+		K1=@CLIP_UPPER
+  	  ENDIF
+  	  IF CLIPPARAM(@CLIP_X1) < CLIPPARAM(@CLIP_XMIN)
+    	K1=K1!@CLIP_LEFT
+  	  ENDIF
+  	  IF CLIPPARAM(@CLIP_X1) > CLIPPARAM(@CLIP_XMAX)
+		K1=K1!@CLIP_RIGHT
+  	  ENDIF
+	ENDIF
+
+	'We clip the second point
+	IF K2 > 0
+	  IF (K2 & @CLIP_LEFT) > 0: 'Left of view box
+		CLIPPARAM(@CLIP_Y2)=CLIPPARAM(@CLIP_Y2)+(CLIPPARAM(@CLIP_XMIN)-CLIPPARAM(@CLIP_X2))*DY/DX
+	    CLIPPARAM(@CLIP_X2)=CLIPPARAM(@CLIP_XMIN)
+	  ELSE
+	  	IF (K2 & @CLIP_RIGHT) > 0: 'Right of view box
+		  CLIPPARAM(@CLIP_Y2)=CLIPPARAM(@CLIP_Y2)+(CLIPPARAM(@CLIP_XMAX)-1-CLIPPARAM(@CLIP_X2))*DY/DX
+		  CLIPPARAM(@CLIP_X2)=CLIPPARAM(@CLIP_XMAX)-1
+		ENDIF
+	  ENDIF
+	  IF (K2 & @CLIP_LOWER) > 0: 'Under view box
+		CLIPPARAM(@CLIP_X2)=CLIPPARAM(@CLIP_X2)+(CLIPPARAM(@CLIP_YMIN)-CLIPPARAM(@CLIP_Y2))*DX/DY
+	    CLIPPARAM(@CLIP_Y2)=CLIPPARAM(@CLIP_YMIN)
+	  ELSE
+	  	IF (K2 & @CLIP_UPPER) > 0: 'Over view box
+		  CLIPPARAM(@CLIP_X2)=CLIPPARAM(@CLIP_X2)+(CLIPPARAM(@CLIP_YMAX)-1-CLIPPARAM(@CLIP_Y2))*DX/DY
+		  CLIPPARAM(@CLIP_Y2)=CLIPPARAM(@CLIP_YMAX)-1
+		ENDIF
+	  ENDIF
+	  K2 = 0
+	  'We recheck clipping.
+      IF CLIPPARAM(@CLIP_Y2) < CLIPPARAM(@CLIP_YMIN)
+        K2=@CLIP_LOWER
+      ENDIF
+  	  IF CLIPPARAM(@CLIP_Y2) > CLIPPARAM(@CLIP_YMAX)
+		K2=@CLIP_UPPER
+  	  ENDIF
+  	  IF CLIPPARAM(@CLIP_X2) < CLIPPARAM(@CLIP_XMIN)
+    	K2=K2!@CLIP_LEFT
+  	  ENDIF
+  	  IF CLIPPARAM(@CLIP_X2) > CLIPPARAM(@CLIP_XMAX)
+		K2=K2!@CLIP_RIGHT
+  	  ENDIF
+	ENDIF
+  WEND
+ENDPROC
+
+PROC SHOWPARAM
+  FOR I=0 TO 8
+    ? CLIPPARAM(I)
+  NEXT I
 ENDPROC
